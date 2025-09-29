@@ -1,0 +1,614 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Benchmarks</title>
+    <script src="https://go-echarts.github.io/go-echarts-assets/assets/echarts.min.js"></script>
+    <script src="https://go-echarts.github.io/go-echarts-assets/assets/themes/light.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            width: 100%;
+            font-family: Arial, sans-serif;
+            scroll-padding-top: 20px;
+        }
+
+        .chart {
+            margin: 20px auto;
+            width: 98%;
+            height: 500px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-width: 1080px;
+            scroll-margin-top: 20px;
+        }
+
+        .chart ~ .chart {
+            margin-top: 50px;
+        }
+
+        .container {
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            font-family: Arial, sans-serif;
+            margin: 20px 0;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            position: fixed;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            cursor: move;
+            user-select: none;
+        }
+        
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: move;
+        }
+        
+        .sidebar-title {
+            font-weight: bold;
+            text-align: center;
+            font-size: 14px;
+            flex-grow: 1;
+        }
+        
+        .minimize-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 5px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .minimize-btn:hover {
+            color: #333;
+        }
+        
+        .sidebar.minimized {
+            width: auto;
+            padding: 5px;
+        }
+        
+        .sidebar.minimized .bench-indicator,
+        .sidebar.minimized .sidebar-title {
+            display: none;
+        }
+        
+        .sidebar.minimized .minimize-btn {
+            transform: rotate(180deg);
+            font-size: 14px;
+            padding: 3px;
+            margin: 0;
+        }
+        
+        .sidebar.minimized .sidebar-header {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .bench-indicator {
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        .bench-indicator:hover {
+            background-color: #e0e0e0;
+        }
+        
+        .bench-indicator.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+    </style>
+    <script type="text/javascript">
+        // Add resize event handler to make charts responsive
+        window.addEventListener('resize', function() {
+            // Resize all charts when window size changes
+            const charts = document.querySelectorAll('.item');
+            charts.forEach(function(chart) {
+                const instance = echarts.getInstanceByDom(chart);
+                if (instance) {
+                    instance.resize();
+                }
+            });
+        });
+        
+        // Initialize sidebar functionality when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('bench-sidebar');
+            const groups = document.querySelectorAll('.bench-indicator');
+            const chartSections = document.querySelectorAll('.chart-section');
+            const minimizeBtn = document.getElementById('minimize-btn');
+            
+            // Only show sidebar if there are multiple groups
+            if (sidebar && groups.length <= 1) {
+                sidebar.style.display = 'none';
+            }
+            
+            // Make sidebar draggable
+            let isDragging = false;
+            let offsetX, offsetY;
+            
+            function startDrag(e) {
+                // Only start drag if it's the sidebar header or the sidebar itself when minimized
+                if (e.target.closest('.sidebar-header') || 
+                    (sidebar.classList.contains('minimized') && e.target.closest('.sidebar'))) {
+                    isDragging = true;
+                    
+                    // Get the current position of the sidebar
+                    const sidebarRect = sidebar.getBoundingClientRect();
+                    
+                    // Calculate the offset from the mouse position to the sidebar position
+                    offsetX = e.clientX - sidebarRect.left;
+                    offsetY = e.clientY - sidebarRect.top;
+                    
+                    // Prevent text selection during drag
+                    e.preventDefault();
+                }
+            }
+            
+            function drag(e) {
+                if (isDragging) {
+                    // Calculate new position
+                    const x = e.clientX - offsetX;
+                    const y = e.clientY - offsetY;
+                    
+                    // Apply new position
+                    sidebar.style.left = x + 'px';
+                    sidebar.style.top = y + 'px';
+                    sidebar.style.right = 'auto';
+                    sidebar.style.transform = 'none';
+                }
+            }
+            
+            function stopDrag() {
+                isDragging = false;
+            }
+            
+            // Add event listeners for dragging
+            sidebar.addEventListener('mousedown', startDrag);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            
+            // Minimize/maximize sidebar
+            minimizeBtn.addEventListener('click', function() {
+                sidebar.classList.toggle('minimized');
+                this.textContent = sidebar.classList.contains('minimized') ? '◀' : '▶';
+            });
+            
+            // Add click event to each indicator
+            groups.forEach(function(indicator) {
+                indicator.addEventListener('click', function() {
+                    const targetId = this.getAttribute('data-target');
+                    const targetElement = document.getElementById(targetId);
+                    
+                    if (targetElement) {
+                        // Scroll to the target element
+                        targetElement.scrollIntoView({ behavior: 'smooth' });
+                        
+                        // Update active state
+                        groups.forEach(ind => ind.classList.remove('active'));
+                        this.classList.add('active');
+                    }
+                });
+            });
+            
+            // Update active indicator on scroll
+            window.addEventListener('scroll', function() {
+                let currentSection = '';
+                
+                chartSections.forEach(function(section) {
+                    const sectionTop = section.offsetTop;
+                    const sectionHeight = section.clientHeight;
+                    
+                    if (pageYOffset >= (sectionTop - 100)) {
+                        currentSection = section.getAttribute('id');
+                    }
+                });
+                
+                groups.forEach(function(indicator) {
+                    indicator.classList.remove('active');
+                    if (indicator.getAttribute('data-target') === currentSection) {
+                        indicator.classList.add('active');
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Benchmarks (CPU: 16)</h1>
+    
+
+    
+    
+    
+    <!-- Sidebar for benchmark navigation -->
+    <div id="bench-sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Bench Groups</div>
+            <button id="minimize-btn" class="minimize-btn">▶</button>
+        </div>
+        
+        
+        <div class="bench-indicator active" data-target="bench-section-0">
+            OutPoint_SliceBuild
+        </div>
+        
+        
+        
+        <div class="bench-indicator" data-target="bench-section-1">
+            OutPoint_SliceIterate
+        </div>
+        
+        
+        
+        <div class="bench-indicator" data-target="bench-section-2">
+            OutPoint_SliceBuildAndIterate
+        </div>
+        
+        
+        
+        <div class="bench-indicator" data-target="bench-section-3">
+            Utxo_SliceBuild
+        </div>
+        
+        
+        
+        <div class="bench-indicator" data-target="bench-section-4">
+            Utxo_SliceIterate
+        </div>
+        
+        
+        
+        <div class="bench-indicator" data-target="bench-section-5">
+            Utxo_SliceBuildAndIterate
+        </div>
+        
+        
+    </div>
+    
+    
+    
+    <div id="bench-section-0" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="tfQcznCBEIHM" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_tfQcznCBEIHM = echarts.init(document.getElementById('tfQcznCBEIHM'), "white", { renderer: "canvas" });
+    let option_tfQcznCBEIHM = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"43.93"},{"value":"78.18"},{"value":"147.10"},{"value":"271.50"},{"value":"520.20"},{"value":"946.10"},{"value":"1822"},{"value":"3883"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"163.50"},{"value":"301.90"},{"value":"574.70"},{"value":"1123"},{"value":"2224"},{"value":"4451"},{"value":"8851"},{"value":"17527"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuild - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_tfQcznCBEIHM.setOption(option_tfQcznCBEIHM);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="QXSpbUGJzYaT" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_QXSpbUGJzYaT = echarts.init(document.getElementById('QXSpbUGJzYaT'), "white", { renderer: "canvas" });
+    let option_QXSpbUGJzYaT = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"2304"},{"value":"4608"},{"value":"9216"},{"value":"18432"},{"value":"38912"},{"value":"75776"},{"value":"147456"},{"value":"327680"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"3584"},{"value":"7168"},{"value":"14336"},{"value":"28672"},{"value":"58368"},{"value":"116736"},{"value":"235520"},{"value":"468992"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuild - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_QXSpbUGJzYaT.setOption(option_QXSpbUGJzYaT);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="THBENgMsAOLR" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_THBENgMsAOLR = echarts.init(document.getElementById('THBENgMsAOLR'), "white", { renderer: "canvas" });
+    let option_THBENgMsAOLR = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"9"},{"value":"17"},{"value":"33"},{"value":"65"},{"value":"129"},{"value":"257"},{"value":"513"},{"value":"1025"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuild - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_THBENgMsAOLR.setOption(option_THBENgMsAOLR);
+</script>
+
+        </div>
+        
+    </div>
+    
+    <div id="bench-section-1" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="LeldQdNCyXrQ" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_LeldQdNCyXrQ = echarts.init(document.getElementById('LeldQdNCyXrQ'), "white", { renderer: "canvas" });
+    let option_LeldQdNCyXrQ = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"7.04"},{"value":"13.58"},{"value":"27.48"},{"value":"53.28"},{"value":"109"},{"value":"216"},{"value":"427"},{"value":"873.10"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"3.10"},{"value":"5.75"},{"value":"11.32"},{"value":"22"},{"value":"48.43"},{"value":"91.62"},{"value":"181.10"},{"value":"477.50"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceIterate - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_LeldQdNCyXrQ.setOption(option_LeldQdNCyXrQ);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="HrxEFFDnAeLj" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_HrxEFFDnAeLj = echarts.init(document.getElementById('HrxEFFDnAeLj'), "white", { renderer: "canvas" });
+    let option_HrxEFFDnAeLj = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceIterate - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_HrxEFFDnAeLj.setOption(option_HrxEFFDnAeLj);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="eLLLBDGRPdLD" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_eLLLBDGRPdLD = echarts.init(document.getElementById('eLLLBDGRPdLD'), "white", { renderer: "canvas" });
+    let option_eLLLBDGRPdLD = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceIterate - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-OutPoints","0016-OutPoints","0032-OutPoints","0064-OutPoints","0128-OutPoints","0256-OutPoints","0512-OutPoints","1024-OutPoints"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_eLLLBDGRPdLD.setOption(option_eLLLBDGRPdLD);
+</script>
+
+        </div>
+        
+    </div>
+    
+    <div id="bench-section-2" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="ndtrYdIyNrTL" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_ndtrYdIyNrTL = echarts.init(document.getElementById('ndtrYdIyNrTL'), "white", { renderer: "canvas" });
+    let option_ndtrYdIyNrTL = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"522.10"},{"value":"633.60"},{"value":"751.50"},{"value":"865"},{"value":"981.50"},{"value":"1102"},{"value":"1234"},{"value":"1360"},{"value":"1444"},{"value":"1567"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"2224"},{"value":"2284"},{"value":"2373"},{"value":"2439"},{"value":"2504"},{"value":"2577"},{"value":"2653"},{"value":"2700"},{"value":"2789"},{"value":"2864"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuildAndIterate - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-OutPointsNReads0","128-OutPointsNReads1","128-OutPointsNReads2","128-OutPointsNReads3","128-OutPointsNReads4","128-OutPointsNReads5","128-OutPointsNReads6","128-OutPointsNReads7","128-OutPointsNReads8","128-OutPointsNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_ndtrYdIyNrTL.setOption(option_ndtrYdIyNrTL);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="AfdKHvbmzvEO" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_AfdKHvbmzvEO = echarts.init(document.getElementById('AfdKHvbmzvEO'), "white", { renderer: "canvas" });
+    let option_AfdKHvbmzvEO = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"},{"value":"38912"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"},{"value":"58368"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuildAndIterate - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-OutPointsNReads0","128-OutPointsNReads1","128-OutPointsNReads2","128-OutPointsNReads3","128-OutPointsNReads4","128-OutPointsNReads5","128-OutPointsNReads6","128-OutPointsNReads7","128-OutPointsNReads8","128-OutPointsNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_AfdKHvbmzvEO.setOption(option_AfdKHvbmzvEO);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="IyQJoWSHdZRM" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_IyQJoWSHdZRM = echarts.init(document.getElementById('IyQJoWSHdZRM'), "white", { renderer: "canvas" });
+    let option_IyQJoWSHdZRM = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"},{"value":"1"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"OutPoint_SliceBuildAndIterate - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-OutPointsNReads0","128-OutPointsNReads1","128-OutPointsNReads2","128-OutPointsNReads3","128-OutPointsNReads4","128-OutPointsNReads5","128-OutPointsNReads6","128-OutPointsNReads7","128-OutPointsNReads8","128-OutPointsNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_IyQJoWSHdZRM.setOption(option_IyQJoWSHdZRM);
+</script>
+
+        </div>
+        
+    </div>
+    
+    <div id="bench-section-3" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="MjaapBTcAVBY" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_MjaapBTcAVBY = echarts.init(document.getElementById('MjaapBTcAVBY'), "white", { renderer: "canvas" });
+    let option_MjaapBTcAVBY = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"286.50"},{"value":"612.70"},{"value":"1280"},{"value":"2698"},{"value":"5506"},{"value":"11502"},{"value":"24660"},{"value":"56634"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"393.10"},{"value":"794.70"},{"value":"1669"},{"value":"3528"},{"value":"7367"},{"value":"15627"},{"value":"31634"},{"value":"69137"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuild - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_MjaapBTcAVBY.setOption(option_MjaapBTcAVBY);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="PRoXQDRRWvRV" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_PRoXQDRRWvRV = echarts.init(document.getElementById('PRoXQDRRWvRV'), "white", { renderer: "canvas" });
+    let option_PRoXQDRRWvRV = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"11264"},{"value":"26624"},{"value":"61440"},{"value":"139264"},{"value":"311296"},{"value":"688136"},{"value":"1507352"},{"value":"3342392"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"11776"},{"value":"27648"},{"value":"63488"},{"value":"143360"},{"value":"320512"},{"value":"706568"},{"value":"1546264"},{"value":"3483704"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuild - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_PRoXQDRRWvRV.setOption(option_PRoXQDRRWvRV);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="QVNnkVAIvSkM" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_QVNnkVAIvSkM = echarts.init(document.getElementById('QVNnkVAIvSkM'), "white", { renderer: "canvas" });
+    let option_QVNnkVAIvSkM = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"9"},{"value":"17"},{"value":"33"},{"value":"65"},{"value":"129"},{"value":"257"},{"value":"513"},{"value":"1025"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"17"},{"value":"33"},{"value":"65"},{"value":"129"},{"value":"257"},{"value":"513"},{"value":"1025"},{"value":"2049"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuild - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_QVNnkVAIvSkM.setOption(option_QVNnkVAIvSkM);
+</script>
+
+        </div>
+        
+    </div>
+    
+    <div id="bench-section-4" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="SPtCBHHNSJLM" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_SPtCBHHNSJLM = echarts.init(document.getElementById('SPtCBHHNSJLM'), "white", { renderer: "canvas" });
+    let option_SPtCBHHNSJLM = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"21.32"},{"value":"41.71"},{"value":"83.49"},{"value":"165.60"},{"value":"332.90"},{"value":"660.80"},{"value":"1321"},{"value":"2704"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"4.20"},{"value":"7.67"},{"value":"15.31"},{"value":"29.48"},{"value":"63.06"},{"value":"171.60"},{"value":"504"},{"value":"1005"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceIterate - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_SPtCBHHNSJLM.setOption(option_SPtCBHHNSJLM);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="TOglltlmErNH" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_TOglltlmErNH = echarts.init(document.getElementById('TOglltlmErNH'), "white", { renderer: "canvas" });
+    let option_TOglltlmErNH = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceIterate - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_TOglltlmErNH.setOption(option_TOglltlmErNH);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="vhyKYeBMzMxX" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_vhyKYeBMzMxX = echarts.init(document.getElementById('vhyKYeBMzMxX'), "white", { renderer: "canvas" });
+    let option_vhyKYeBMzMxX = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"},{"value":"0"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceIterate - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["0008-Utxos-034-Script","0016-Utxos-068-Script","0032-Utxos-102-Script","0064-Utxos-136-Script","0128-Utxos-170-Script","0256-Utxos-204-Script","0512-Utxos-238-Script","1024-Utxos-272-Script"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_vhyKYeBMzMxX.setOption(option_vhyKYeBMzMxX);
+</script>
+
+        </div>
+        
+    </div>
+    
+    <div id="bench-section-5" class="chart-section">
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="GMTYoeGHTSYv" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_GMTYoeGHTSYv = echarts.init(document.getElementById('GMTYoeGHTSYv'), "white", { renderer: "canvas" });
+    let option_GMTYoeGHTSYv = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"4311"},{"value":"4686"},{"value":"5105"},{"value":"5470"},{"value":"5937"},{"value":"6361"},{"value":"6673"},{"value":"6995"},{"value":"7634"},{"value":"7952"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"6089"},{"value":"6206"},{"value":"6259"},{"value":"6279"},{"value":"6527"},{"value":"6500"},{"value":"6590"},{"value":"6617"},{"value":"6901"},{"value":"6720"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuildAndIterate - Execution Time (ns/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-Utxos-64-ScriptNReads0","128-Utxos-64-ScriptNReads1","128-Utxos-64-ScriptNReads2","128-Utxos-64-ScriptNReads3","128-Utxos-64-ScriptNReads4","128-Utxos-64-ScriptNReads5","128-Utxos-64-ScriptNReads6","128-Utxos-64-ScriptNReads7","128-Utxos-64-ScriptNReads8","128-Utxos-64-ScriptNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_GMTYoeGHTSYv.setOption(option_GMTYoeGHTSYv);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="BRrKmBZIpbVk" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_BRrKmBZIpbVk = echarts.init(document.getElementById('BRrKmBZIpbVk'), "white", { renderer: "canvas" });
+    let option_BRrKmBZIpbVk = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"},{"value":"196608"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"},{"value":"205824"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuildAndIterate - Memory Usage (b/op)","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-Utxos-64-ScriptNReads0","128-Utxos-64-ScriptNReads1","128-Utxos-64-ScriptNReads2","128-Utxos-64-ScriptNReads3","128-Utxos-64-ScriptNReads4","128-Utxos-64-ScriptNReads5","128-Utxos-64-ScriptNReads6","128-Utxos-64-ScriptNReads7","128-Utxos-64-ScriptNReads8","128-Utxos-64-ScriptNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_BRrKmBZIpbVk.setOption(option_BRrKmBZIpbVk);
+</script>
+
+        </div>
+        
+        <div class='chart'>
+            
+    
+    <div class="container">
+    <div class="item" id="zauBWVNbSVtC" style="width:100%;height:500px;"></div>
+</div><script type="text/javascript">
+    "use strict";
+    let goecharts_zauBWVNbSVtC = echarts.init(document.getElementById('zauBWVNbSVtC'), "white", { renderer: "canvas" });
+    let option_zauBWVNbSVtC = {"color":["#5470C6","#3BA272","#FC8452","#73C0DE","#EE6666","#FAC858","#9A60B4","#EA7CCC","#91CC75","#FF9F7F","#3E5A9E","#2E7D32","#EF6C00","#7E57C2","#F9A825","#6A8ACF","#4CAF50","#FF8F00","#AB47BC","#FFEB3B","#2B4E72","#1B5E20","#D84315","#512DA8","#F57F17","#4A90E2","#66BB6A","#FF5722","#BA68C8","#FFF176","#1E3A5F","#00695C","#BF360C","#673AB7","#C0CA33","#7FB3D5","#81C784","#FFAB91","#E040FB","#DCE775","#335C8A","#388E3C","#E64A19","#9575CD","#78909C","#5C9EAD","#AED581","#FF7043","#F06292","#A1887F"],"grid":[{"left":"3%","top":"15%","right":"3%","bottom":"3%","containLabel":true}],"legend":{"show":true,"left":"center","top":"7%","itemWidth":10,"itemHeight":10,"textStyle":{"fontSize":12}},"series":[{"name":"0-Values","type":"bar","data":[{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"},{"value":"129"}],"itemStyle":{"color":"#5470C6"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}},{"name":"1-Pointers","type":"bar","data":[{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"},{"value":"257"}],"itemStyle":{"color":"#3BA272"},"label":{"show":true,"fontSize":10,"position":"top","formatter":"{c}"}}],"title":{"text":"Utxo_SliceBuildAndIterate - Allocations/op","left":"2%","top":"1%"},"toolbox":{"show":true,"right":"2%","feature":{"saveAsImage":{"show":true,"type":"png","title":"Save"}}},"tooltip":{},"xAxis":[{"data":["128-Utxos-64-ScriptNReads0","128-Utxos-64-ScriptNReads1","128-Utxos-64-ScriptNReads2","128-Utxos-64-ScriptNReads3","128-Utxos-64-ScriptNReads4","128-Utxos-64-ScriptNReads5","128-Utxos-64-ScriptNReads6","128-Utxos-64-ScriptNReads7","128-Utxos-64-ScriptNReads8","128-Utxos-64-ScriptNReads9"]}],"yAxis":[{"splitLine":{"show":true},"axisLabel":{"show":true,"showMinLabel":null,"showMaxLabel":null}}]}
+
+    goecharts_zauBWVNbSVtC.setOption(option_zauBWVNbSVtC);
+</script>
+
+        </div>
+        
+    </div>
+    
+
+    <footer style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 14px; color: #666;">
+        Generated by <a alt="Vizb" target="_blank" href="https://github.com/goptics/vizb" style="color: #666; text-decoration: none; font-weight: bold;">Vizb</a> | Made with <span style="color: #e25555;">❤</span> -  <a alt="Goptics" target="_blank" href="https://github.com/goptics" style="color: #666; text-decoration: none; font-weight: bold;">Goptics</a> &copy; 2025
+    </footer>
+</body>
+</html>
