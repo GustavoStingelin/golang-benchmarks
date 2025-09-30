@@ -38,8 +38,12 @@ func BenchmarkUtxo_ReturnOnly(b *testing.B) {
 	)
 
 	// Build once outside the timed loop.
-	vals := buildUtxoValues(n, scriptSize)
-	ptrs := buildUtxoPointers(n, scriptSize)
+	pkScript := make([]byte, scriptSize)
+	for j := 0; j < scriptSize; j++ {
+		pkScript[j] = byte(j)
+	}
+	vals := buildUtxoValues(n, pkScript)
+	ptrs := buildUtxoPointers(n, pkScript)
 
 	name := fmt.Sprintf("%d-Utxo-%dScript-ReturnOnly", n, scriptSize)
 
